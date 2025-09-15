@@ -1,8 +1,8 @@
 import pymongo
 from datetime import datetime, timezone
-from scrapers.laststraw import scrape_reddit_search
-from scrapers.laststraw import scrape_telegram_channel
-from scrapers.utube import search_videos, fetch_comments
+from redtel import scrape_reddit_search
+from redtel import scrape_telegram_channel
+from utube import search_videos, fetch_comments
 
 
 def to_doc(item):
@@ -27,9 +27,9 @@ def main():
 
     # Reddit
     reddit_posts = scrape_reddit_search(
-        keywords=["cyclone", "flood",],
-        subreddits=["bangalore", "mumbai", "chennai", "kolkata"],
-        limit=5
+        keywords=["cyclone", "coastal flooding", "seawater intrusion", "flood alert", "tsunami warning", "earthquake tremor sea", "aftershock sea level", "ocean waves warning"],
+        subreddits=["bangalore", "mumbai", "chennai", "kolkata", "Odisha", "India"],
+        limit= 1
     )
     if reddit_posts:  # only insert if non-empty
         col.insert_many([to_doc(p) for p in reddit_posts])
@@ -37,19 +37,29 @@ def main():
         print("[Reddit] No posts found for given query.")
 
     # Telegram
-    telegram_posts = scrape_telegram_channel("IndianExpress", limit=5)
-    col.insert_many([to_doc(p) for p in telegram_posts])
+    hazard_keywords = [
+        "flood", "cyclone", "storm", "rain", "landslide",
+        "earthquake", "dam", "relief", "rescue", "disaster",
+        "shelter", "alert", "tsunami"
+    ]
 
+    telegram_posts = scrape_telegram_channel(
+        "ChennaiRains",  # or IndianWeatherUpdates, etc.
+        limit=20,
+        keywords=hazard_keywords
+    )
+    if telegram_posts:
+        col.insert_many([to_doc(p) for p in telegram_posts])
+    
     # YouTube (first find videos, then fetch comments)
-    videos = search_videos("Cyclone India", max_results=2)
+    videos = search_videos("Tsunami India", max_results=2)
     for v in videos:
-        comments = fetch_comments(v["videoId"], limit=5)
+        comments = fetch_comments(v["videoId"], limit= 5)
         for c in comments:
             c["meta"] = {"videoId": v["videoId"], "videoTitle": v["title"]}
             col.insert_one(to_doc(c))
 
     print("Data inserted into MongoDB successfully.")
-
 
 if __name__ == "__main__":
     main()

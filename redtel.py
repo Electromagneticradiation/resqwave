@@ -115,10 +115,10 @@ def scrape_reddit_search(keywords, subreddits=None, limit=25):
 
     return posts
 # ----------------- Telegram scraping via t.me/s/<channel> -----------------
-def scrape_telegram_channel(channel, limit=25):
+def scrape_telegram_channel(channel, limit=25, keywords=None):
     """
     Scrape public telegram channel via t.me/s/<channel> HTML.
-    Returns list of unified posts.
+    Returns list of unified posts, filtered by keywords if provided.
     """
     url = f"https://t.me/s/{channel}"
     headers = {"User-Agent": UA}
@@ -131,7 +131,6 @@ def scrape_telegram_channel(channel, limit=25):
         return []
 
     soup = BeautifulSoup(html_text, "html.parser")
-    # Telegram message blocks
     msgs = soup.select("div.tgme_widget_message")
     results = []
     for m in msgs[:limit]:
@@ -139,42 +138,58 @@ def scrape_telegram_channel(channel, limit=25):
         text_node = m.select_one("div.tgme_widget_message_text")
         content = ""
         if text_node:
-            # preserve line breaks but remove extra spaces
             content = "\n".join([line.strip() for line in text_node.strings])
             content = html.unescape(content)
-        # date/time: anchor with class 'tgme_widget_message_date' has a time tag
+
+        # skip if no content
+        if not content.strip():
+            continue
+
+        # filter by keywords
+        if keywords:
+            lowered = content.lower()
+            if not any(kw.lower() in lowered for kw in keywords):
+                continue
+
+        # date/time
         date_iso = None
         date_anchor = m.select_one("a.tgme_widget_message_date")
         if date_anchor:
             time_tag = date_anchor.find("time")
             if time_tag and time_tag.has_attr("datetime"):
                 date_iso = time_tag["datetime"]
+
         # post id and url
         post_url = None
         post_id = None
         if date_anchor and date_anchor.has_attr("href"):
-            href = date_anchor["href"]  # e.g. /channel/123 or /channel/123
-            # sometimes href like '/channelname/123'
+            href = date_anchor["href"]
             parts = href.strip("/").split("/")
             if len(parts) >= 2 and parts[-1].isdigit():
                 post_id = parts[-1]
-        # fallback: some messages have 'data-post' attributes
         if not post_id:
-            try:
-                post_id = m["data-post"]
-            except Exception:
-                post_id = None
+            post_id = m.get("data-post")
         if post_id:
             post_url = f"https://t.me/{channel}/{post_id}"
 
-        # author: sometimes present in header
+        # author
         author = None
         author_tag = m.select_one("a.tgme_widget_message_from_author")
         if author_tag:
             author = author_tag.text.strip()
 
-        results.append(unify_post(content or "", "telegram", date_iso=date_iso, author=author, url=post_url, extra={"channel": channel, "post_id": post_id}))
+        results.append(
+            unify_post(
+                content,
+                "telegram",
+                date_iso=date_iso,
+                author=author,
+                url=post_url,
+                extra={"channel": channel, "post_id": post_id},
+            )
+        )
     return results
+
 
 # ----------------- CLI usage -----------------
 def pretty_print_list(l):
