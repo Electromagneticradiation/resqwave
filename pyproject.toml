@@ -1,0 +1,24 @@
+[project]
+package-mode = false
+name = "resqwave"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Snow",email = "githubwithsnow@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.8,<3.12"
+dependencies = [
+    "snscrape (>=0.7.0.20230622,<0.8.0.0)",
+    "certifi (>=2025.8.3,<2026.0.0)",
+    "telethon (>=1.41.2,<2.0.0)",
+    "praw (>=7.8.1,<8.0.0)",
+    "feedparser (>=6.0.12,<7.0.0)",
+    "python-dateutil (>=2.9.0.post0,<3.0.0)",
+    "dotenv (>=0.9.9,<0.10.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
