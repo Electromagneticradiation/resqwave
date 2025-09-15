@@ -39,7 +39,7 @@ def fetch_comments(video_id, limit=10):
 
 if __name__ == "__main__":
     # Example: scrape for cyclone-related videos in India
-    videos = search_videos("cyclone India 2025", max_results=2)
+    videos = search_videos("anime trailer", max_results=3)
     for v in videos:
         print(f"Fetching comments for video: {v['title']}")
         comments = fetch_comments(v["videoId"], limit=5)

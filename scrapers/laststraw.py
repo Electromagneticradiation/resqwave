@@ -1,14 +1,11 @@
-# fast_scrapers.py
 import requests
 from bs4 import BeautifulSoup
 from dateutil import parser as dateparser
 from datetime import datetime, timezone
-import time
-import json
 import sys
 import html
 
-UA = "ResQwaveBot/1.0 (by you) Python/requests"
+UA = "ResQwaveBot (for collecting ocean hazards ground intel) Python/requests"
 
 def to_utc_iso(value):
     """Normalize timestamps to timezone-aware UTC ISO strings."""
@@ -48,44 +45,75 @@ def scrape_reddit_search(keywords, subreddits=None, limit=25):
     """
     Uses reddit.com search JSON endpoints (no OAuth).
     keywords: list or string (if list, they will be OR-joined).
-    subreddits: list or None
+    subreddits: list, string with + (multi-subreddit), or None
     """
     q = keywords if isinstance(keywords, str) else " OR ".join(keywords)
-    if subreddits:
-        sub_part = ",".join(subreddits) if isinstance(subreddits, (list,tuple)) else subreddits
-        url = f"https://www.reddit.com/r/{sub_part}/search.json"
-    else:
-        url = "https://www.reddit.com/search.json"
-    params = {
-        "q": q,
-        "restrict_sr": bool(subreddits),
-        "sort": "new",
-        "limit": limit,
-        "include_over_18": "on"
-    }
     headers = {"User-Agent": UA}
-    try:
-        r = requests.get(url, params=params, headers=headers, timeout=15)
-        r.raise_for_status()
-        data = r.json()
-    except Exception as e:
-        print("[Reddit] request failed:", e)
-        return []
-
     posts = []
-    children = data.get("data", {}).get("children", [])
-    for c in children:
-        d = c.get("data", {})
-        title = d.get("title") or ""
-        selftext = d.get("selftext") or ""
-        text = (title + "\n" + selftext).strip()
-        created = d.get("created_utc")
-        url_post = "https://www.reddit.com" + d.get("permalink") if d.get("permalink") else d.get("url")
-        author = d.get("author")
-        posts.append(unify_post(text, "reddit", date_iso=created, author=author, url=url_post,
-                                extra={"subreddit": d.get("subreddit"), "id": d.get("id"), "score": d.get("score"), "num_comments": d.get("num_comments")}))
-    return posts
 
+    # normalize subreddits
+    if subreddits:
+        if isinstance(subreddits, str):
+            subs = subreddits.split("+")
+        elif isinstance(subreddits, (list, tuple)):
+            subs = []
+            for s in subreddits:
+                subs.extend(s.split("+"))
+        else:
+            subs = []
+    else:
+        subs = [None]
+
+    for sub in subs:
+        if sub:
+            url = f"https://www.reddit.com/r/{sub}/search.json"
+            params = {
+                "q": q,
+                "restrict_sr": True,
+                "sort": "new",
+                "limit": limit,
+                "include_over_18": "on"
+            }
+        else:
+            url = "https://www.reddit.com/search.json"
+            params = {
+                "q": q,
+                "sort": "new",
+                "limit": limit,
+                "include_over_18": "on"
+            }
+
+        try:
+            r = requests.get(url, params=params, headers=headers, timeout=15)
+            r.raise_for_status()
+            data = r.json()
+        except Exception as e:
+            print(f"[Reddit:{sub or 'all'}] request failed:", e)
+            continue
+
+        children = data.get("data", {}).get("children", [])
+        for c in children:
+            d = c.get("data", {})
+            title = d.get("title") or ""
+            selftext = d.get("selftext") or ""
+            text = (title + "\n" + selftext).strip()
+            created = d.get("created_utc")
+            url_post = "https://www.reddit.com" + d.get("permalink") if d.get("permalink") else d.get("url")
+            author = d.get("author")
+            posts.append(unify_post(
+                text, "reddit",
+                date_iso=created,
+                author=author,
+                url=url_post,
+                extra={
+                    "subreddit": d.get("subreddit"),
+                    "id": d.get("id"),
+                    "score": d.get("score"),
+                    "num_comments": d.get("num_comments")
+                }
+            ))
+
+    return posts
 # ----------------- Telegram scraping via t.me/s/<channel> -----------------
 def scrape_telegram_channel(channel, limit=25):
     """
@@ -161,14 +189,15 @@ def pretty_print_list(l):
         print()
 
 if __name__ == "__main__":
-    # very small CLI:
-    # python fast_scrapers.py reddit "flood cyclone" 10
-    # python fast_scrapers.py reddit "flood" 10 india,news
-    # python fast_scrapers.py telegram durov 5
+
+    # Example usage:
+    # python scrapers/laststraw.py reddit "flood cyclone" 10 india+news
+    # python scrapers/laststraw.py telegram durov 5
+
     if len(sys.argv) < 3:
         print("Usage:")
-        print("  python fast_scrapers.py reddit <keywords> [limit] [subreddits(comma-separated|optional)]")
-        print("  python fast_scrapers.py telegram <channel> [limit]")
+        print("  python scraper.py reddit <keywords> [limit] [subreddits(separated by plus (+)|optional)]")
+        print("  python scraper.py telegram <channel> [limit]")
         sys.exit(1)
 
     backend = sys.argv[1].lower()
@@ -179,11 +208,11 @@ if __name__ == "__main__":
         if len(sys.argv) > 4:
             subreddits = sys.argv[4].split(",")
         out = scrape_reddit_search(keywords.split(), subreddits=subreddits, limit=limit)
-        print(json.dumps(out, ensure_ascii=False, indent=2))
+        pretty_print_list(out)
     elif backend == "telegram":
         channel = sys.argv[2]
         limit = int(sys.argv[3]) if len(sys.argv) > 3 else 10
         out = scrape_telegram_channel(channel, limit=limit)
-        print(json.dumps(out, ensure_ascii=False, indent=2))
+        pretty_print_list(out)
     else:
         print("Unknown backend")
