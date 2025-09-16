@@ -41,13 +41,23 @@ def unify_post(content, platform, date_iso=None, author=None, url=None, extra=No
     }
 
 # ----------------- Reddit via public JSON endpoints -----------------
+import requests
+
+UA = "resqwave-bot/0.1"
+
 def scrape_reddit_search(keywords, subreddits=None, limit=25):
     """
     Uses reddit.com search JSON endpoints (no OAuth).
     keywords: list or string (if list, they will be OR-joined).
     subreddits: list, string with + (multi-subreddit), or None
     """
-    q = keywords if isinstance(keywords, str) else " OR ".join(keywords)
+    # ensure multi-word keywords are quoted
+    if isinstance(keywords, str):
+        q = f'"{keywords}"' if " " in keywords else keywords
+    else:
+        quoted = [f'"{k}"' if " " in k else k for k in keywords]
+        q = " OR ".join(quoted)
+
     headers = {"User-Agent": UA}
     posts = []
 
@@ -100,6 +110,7 @@ def scrape_reddit_search(keywords, subreddits=None, limit=25):
             created = d.get("created_utc")
             url_post = "https://www.reddit.com" + d.get("permalink") if d.get("permalink") else d.get("url")
             author = d.get("author")
+
             posts.append(unify_post(
                 text, "reddit",
                 date_iso=created,
@@ -114,6 +125,7 @@ def scrape_reddit_search(keywords, subreddits=None, limit=25):
             ))
 
     return posts
+
 # ----------------- Telegram scraping via t.me/s/<channel> -----------------
 def scrape_telegram_channel(channel, limit=25, keywords=None):
     """
